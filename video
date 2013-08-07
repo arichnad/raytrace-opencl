@@ -1,0 +1,13 @@
+#!/bin/bash
+
+renice +20 -p $$ >/dev/null
+
+unset fail 
+which png2yuv >/dev/null || { echo png2yuv not installed:  try installing \"mjpegtools\"; echo sudo apt-get install mjpegtools; fail=TRUE; }
+which vpxenc >/dev/null || { echo vpxenc not installed:  try installing \"vpx-tools\"; echo sudo apt-get install vpx-tools; fail=TRUE; }
+if [[ ! -z "$fail" ]]; then exit 1; fi
+
+echo creating yuv
+png2yuv -I p -f 30 -j output%04d.png > video.yuv || exit 1
+echo creating vpx
+vpxenc --good --cpu-used=0 --auto-alt-ref=1 --lag-in-frames=16 --end-usage=vbr --passes=2 --threads=8 --target-bitrate=100000 -o video.webm video.yuv

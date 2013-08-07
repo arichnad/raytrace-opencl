@@ -1,0 +1,7 @@
+.settings/
+build/
+classes/
+output*.png
+video*.yuv
+video*.webm
+raytrace-opencl.jar

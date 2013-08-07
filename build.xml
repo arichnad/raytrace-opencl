@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project name="raytrace-opencl" default="build" basedir=".">
+
+	<path id="cp">
+		<fileset dir="libs">
+			<include name="*.jar"/>
+		</fileset>
+	</path>
+	
+	<property name="classes.dir" value="classes"/>
+	<property name="src.dir" value="src"/>
+	<property name="jar" value="${ant.project.name}.jar"/>
+	
+	<target name="init">
+	</target>
+
+	<target name="build" depends="init">
+		<mkdir dir="${classes.dir}"/>
+		<javac srcdir="${src.dir}" destdir="${classes.dir}" classpathref="cp" />
+		<jar jarfile="${jar}" compress="true">
+			<fileset dir="${classes.dir}"/>
+			<manifest>
+				<attribute name="Main-Class" value="org.raytrace.RaytraceOpencl" />
+				<attribute name="Class-Path" value="libs/JOCL-0.1.9.jar" />
+			</manifest>
+		</jar>
+	</target>
+
+	<target name="clean">
+		<delete dir="${classes.dir}"/>
+		<delete file="${jar}"/>
+	</target>
+
+</project>
+

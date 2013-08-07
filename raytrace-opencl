@@ -1,0 +1,5 @@
+#!/bin/bash
+
+java='java -Xms1G -Xmx2G -jar raytrace-opencl.jar'
+
+$java $@

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+renice +20 -p $$ >/dev/null
+
+for((i=0;i<1000;i++)); do
+	echo $fname
+	fname=$(printf output%04d.png $i)
+	if [[ ! -e $fname ]]; then
+		./raytrace-opencl $fname $i $@
+	fi
+done
