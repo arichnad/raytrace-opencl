@@ -27,20 +27,17 @@ import org.jocl.cl_platform_id;
 import org.jocl.cl_program;
 
 public class RaytraceOpencl {
+	public static final int WIDTH = 1800;
+	public static final int HEIGHT = 1000; //XXX:  assumes that HEIGHT is a multiple of the number of devices!
+	
 	private static final int PLATFORM_INDEX = 0;
-	private static final int DEVICE_INDEX = 0;
-	private static final int WIDTH = 1800;
-	private static final int HEIGHT = 1000;
-	private cl_context context;
-	private cl_kernel kernel;
-	private cl_device_id device;
-	private cl_mem outputImageMem;
-	private List<cl_mem> mem = new ArrayList<cl_mem>();
+	private int numDevices = 0;
+	private RaytraceOpenclDevice[] raytraceDevices;
 	private int animation = 0;
 	private String filename = "output.png";
 
 	public static void main(String[] args) throws IOException {
-		RaytraceOpencl render = new RaytraceOpencl(readFile("src/kernel.c"));
+		RaytraceOpencl render = new RaytraceOpencl();
 		if(args.length>=1) {
 			render.filename=args[0];
 		}
@@ -48,16 +45,11 @@ public class RaytraceOpencl {
 			render.animation=Integer.parseInt(args[1]);
 		}
 		render.setupAndRun();
-		render.cleanup();
-	}
-
-	private RaytraceOpencl(String kernelString) {
-		setupKernel(kernelString);
 	}
 
 	private void setupAndRun() throws IOException {
-		setupMemory();
-		RenderedImage outputImage = run();
+		setupKernel(readFile("src/kernel.c"));
+		RenderedImage outputImage = waitToFinish();
 		ImageIO.write(outputImage, "png", new File(filename));
 	}
 
@@ -68,50 +60,21 @@ public class RaytraceOpencl {
 		CL.clGetPlatformIDs(platforms.length, platforms, null);
 		cl_platform_id platform = platforms[PLATFORM_INDEX];
 
-		cl_device_id devices[] = new cl_device_id[DEVICE_INDEX+1];
-		CL.clGetDeviceIDs(platform, CL.CL_DEVICE_TYPE_GPU, DEVICE_INDEX+1, devices, null);
-		device = devices[DEVICE_INDEX];
+		int numDevicesArray[] = new int[1];
+		CL.clGetDeviceIDs(platform, CL.CL_DEVICE_TYPE_GPU, 0, null, numDevicesArray);
+		numDevices = numDevicesArray[0];
 
-		cl_context_properties contextProperties = new cl_context_properties();
-		contextProperties.addProperty(CL.CL_CONTEXT_PLATFORM, platform);
+		cl_device_id[] devices = new cl_device_id[numDevices];
+		CL.clGetDeviceIDs(platform, CL.CL_DEVICE_TYPE_GPU, numDevices, devices, null);
+		
+		raytraceDevices = new RaytraceOpenclDevice[numDevices];
 
-		context = CL.clCreateContext(contextProperties, 1, new cl_device_id[] { device }, null, null, null);
-
-		cl_program program = CL.clCreateProgramWithSource(context, 1, new String[] { kernelString }, null, null);
-		CL.clBuildProgram(program, 0, null, null, null, null);
-
-		kernel = CL.clCreateKernel(program, "render", null);
-	}
-
-	private void setupMemory() {
-		int i=0;
-		makeWritableImage();
-		for(cl_mem obj : mem) {
-			CL.clSetKernelArg(kernel, i++, Sizeof.cl_mem, Pointer.to(obj));
+		for (int i=0;i<numDevices;i++) {
+			raytraceDevices[i] = new RaytraceOpenclDevice(platform, devices[i], numDevices, i, kernelString, animation);
 		}
-		CL.clSetKernelArg(kernel, i++, Sizeof.cl_int, Pointer.to(new int[]{WIDTH}));
-		CL.clSetKernelArg(kernel, i++, Sizeof.cl_int, Pointer.to(new int[]{HEIGHT}));
-		CL.clSetKernelArg(kernel, i++, Sizeof.cl_int, Pointer.to(new int[]{animation}));
 	}
 
-	private void makeWritableImage() {
-		cl_image_format imageFormat = new cl_image_format();
-		imageFormat.image_channel_order = CL.CL_RGBA;
-		imageFormat.image_channel_data_type = CL.CL_UNSIGNED_INT8;
-
-		outputImageMem = CL.clCreateImage2D(context, CL.CL_MEM_WRITE_ONLY, new cl_image_format[]{imageFormat}, WIDTH, HEIGHT, 0, null, null);
-		mem.add(outputImageMem);
-	}
-
-	private RenderedImage run() throws IOException {
-		long globalWorkSize[] = new long[] { HEIGHT, WIDTH };
-		//long globalWorkSize[] = new long[] { HEIGHT };
-
-		cl_command_queue commandQueue = CL.clCreateCommandQueue(context, device, 0, null);
-
-		System.out.println("ray tracing");
-		CL.clEnqueueNDRangeKernel(commandQueue, kernel, 2, null, globalWorkSize, null, 0, null, null);
-
+	private RenderedImage waitToFinish() throws IOException {
 		BufferedImage outputImage = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
 
 		DataBufferInt dataBufferDst = (DataBufferInt)outputImage.getRaster().getDataBuffer();
@@ -119,25 +82,15 @@ public class RaytraceOpencl {
 		for(int i=0;i<d.length;i++) {
 			d[i]=0;
 		}
-
-		CL.clEnqueueReadImage(
-				commandQueue, outputImageMem, true, new long[3],
-				new long[]{WIDTH, HEIGHT, 1},
-				WIDTH * Sizeof.cl_uint, 0,
-				Pointer.to(dataBufferDst.getData()), 0, null, null);
-
-		CL.clReleaseCommandQueue(commandQueue);
+		System.out.println("waiting to finish");
+		for(int i=0;i<numDevices;i++) {
+			raytraceDevices[i].waitToFinish(d);
+		}
+		System.out.println("finished");
 
 		return outputImage;
 	}
 
-	private void cleanup() {
-		for(cl_mem obj : mem) {
-			CL.clReleaseMemObject(obj);
-		}
-		CL.clReleaseKernel(kernel);
-		CL.clReleaseContext(context);
-	}
 	private static String readFile(String fileName) throws IOException {
 		BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(fileName)));
 		StringBuffer buffer = new StringBuffer();

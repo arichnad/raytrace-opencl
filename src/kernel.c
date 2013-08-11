@@ -380,8 +380,8 @@ Viewport setupViewport(int x, int y, int w, int h, int animation) {
 	return viewport;
 }
 
-__kernel void render(__write_only __global image2d_t targetImage, int w, int h, int animation) {
-	int y = get_global_id(0);
+__kernel void render(__write_only __global image2d_t targetImage, int w, int h, int heightOffset, int animation) {
+	int y = get_global_id(0)+heightOffset;
 	int x = get_global_id(1);
 	Stack stack;
 	stack.size=0;
@@ -391,7 +391,7 @@ __kernel void render(__write_only __global image2d_t targetImage, int w, int h, 
 	Vector color = getPixelAntialiased(viewport, &stack, &seed);
 	uint4 intColor = {color.z*255, color.y*255, color.x*255, 255};
 
-	int2 posOut = {x, y};
+	int2 posOut = {x, y-heightOffset};
 	write_imageui(targetImage, posOut, intColor);
 }
 
